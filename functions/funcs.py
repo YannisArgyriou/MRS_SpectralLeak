@@ -281,9 +281,32 @@ def getSpecR(lamb0=None,band=None,specres_table=None):
 
 def getSpecR_linearR(lamb0=None,band=None):
     """Return spectral resolution (a.k.a. resolving power) assuming a linear relation to wavelength"""
-    import mrs_aux as maux
-    bandlims = maux.MRS_bands[band]
-    Rlims = maux.MRS_R[band]
+    MRS_bands = {'1A':[4.83,5.82],
+        '1B':[5.62,6.73],
+        '1C':[6.46,7.76],
+        '2A':[7.44,8.90],
+        '2B':[8.61,10.28],
+        '2C':[9.94,11.87],
+        '3A':[11.47,13.67],
+        '3B':[13.25,15.80],
+        '3C':[15.30,18.24],
+        '4A':[17.54,21.10],
+        '4B':[20.44,24.72],
+        '4C':[23.84,28.82]} # microns
+    MRS_R = {'1A':[3320.,3710.],
+        '1B':[3190.,3750.],
+        '1C':[3100.,3610.],
+        '2A':[2990.,3110.],
+        '2B':[2750.,3170.],
+        '2C':[2860.,3300.],
+        '3A':[2530.,2880.],
+        '3B':[1790.,2640.],
+        '3C':[1980.,2790.],
+        '4A':[1460.,1930.],
+        '4B':[1680.,1770.],
+        '4C':[1630.,1330.]} # R = lambda / delta_lambda
+    bandlims = MRS_bands[band]
+    Rlims = MRS_R[band]
     specR = (Rlims[1]-Rlims[0])/(bandlims[1]-bandlims[0]) * (lamb0-bandlims[0]) + Rlims[0]
     return specR
 
@@ -360,14 +383,16 @@ def spectral_gridding_linearR(band=None,d2cMaps=None,oversampling = 1.):
     return np.array(lambcens),np.array(lambfwhms)
 
 def point_source_centroiding(band,sci_img,d2cMaps,spec_grid=None,fit='2D',center=None):
-    import mrs_aux as maux
     # distortion maps
     sliceMap  = d2cMaps['sliceMap']
     lambdaMap = d2cMaps['lambdaMap']
     alphaMap  = d2cMaps['alphaMap']
     betaMap   = d2cMaps['betaMap']
     nslices   = d2cMaps['nslices']
-    mrs_fwhm  = maux.MRS_FWHM[band[0]]
+    MRS_alphapix = {'1':0.196,'2':0.196,'3':0.245,'4':0.273} # arcseconds
+    MRS_FWHM = {'1':2.16*MRS_alphapix['1'],'2':3.30*MRS_alphapix['2'],
+                '3':4.04*MRS_alphapix['3'],'4':5.56*MRS_alphapix['4']} # MRS PSF
+    mrs_fwhm  = MRS_FWHM[band[0]]
     lambcens,lambfwhms = spec_grid[0],spec_grid[1]
     unique_betas = np.sort(np.unique(betaMap[(sliceMap>100*int(band[0])) & (sliceMap<100*(int(band[0])+1))]))
     fov_lims  = [alphaMap[np.nonzero(lambdaMap)].min(),alphaMap[np.nonzero(lambdaMap)].max()]
@@ -483,14 +508,16 @@ def point_source_centroiding(band,sci_img,d2cMaps,spec_grid=None,fit='2D',center
 def point_source_along_slice_centroiding(sci_img,band,d2cMaps,spec_grid=None,offset_slice=0,campaign=None,verbose=False):
     # same as "point_source_centroiding" function, however only performs 1D Gaussian fitting, in along-slice (alpha) direction
     # param. "offset slice" allows to perform the centroiding analysis in a neighboring slice
-    import mrs_aux as maux
     # distortion maps
     sliceMap  = d2cMaps['sliceMap']
     lambdaMap = d2cMaps['lambdaMap']
     alphaMap  = d2cMaps['alphaMap']
     betaMap   = d2cMaps['betaMap']
-    nslices   = maux.MRS_nslices[band[0]]
-    mrs_fwhm  = maux.MRS_FWHM[band[0]]
+    nslices   = d2cMaps['nslices']
+    MRS_alphapix = {'1':0.196,'2':0.196,'3':0.245,'4':0.273} # arcseconds
+    MRS_FWHM = {'1':2.16*MRS_alphapix['1'],'2':3.30*MRS_alphapix['2'],
+                '3':4.04*MRS_alphapix['3'],'4':5.56*MRS_alphapix['4']} # MRS PSF
+    mrs_fwhm  = MRS_FWHM[band[0]]
     lambcens,lambfwhms = spec_grid[0],spec_grid[1]
     unique_betas = np.sort(np.unique(betaMap[(sliceMap>100*int(band[0])) & (sliceMap<100*(int(band[0])+1))]))
     fov_lims  = [alphaMap[np.nonzero(lambdaMap)].min(),alphaMap[np.nonzero(lambdaMap)].max()]
@@ -665,44 +692,24 @@ def aperture_photometry_point_source(band,sci_img,apertureMask,aperture_area,d2c
 
     return signals_aper
 
-# def aperture_photometry_point_source(sci_img,pixsiz_img,apertureMask,d2cMaps,spec_grid=None,img_type='sci'):
-#     lambdaMap = d2cMaps['lambdaMap']
-#     lambcens,lambfwhms = spec_grid[0],spec_grid[1]
-#
-#     signals_aper = np.zeros(len(lambcens))
-#     if img_type == 'sci':
-#         # psf_copy = psf.copy()
-#         for ibin in range(len(lambcens)):
-#             # # map containing only pixels within one spectral bin, omitting NaNs
-#             # pixelsInBinNoNaN = np.where((np.abs(lambdaMap-lambcens[ibin])<lambfwhms[ibin]/2.) & (np.isnan(psf)==False) )
-#             # # Normalize psf in bin so that the peak is at a value of 1.
-#             # psf_copy[pixelsInBinNoNaN] /= psf[pixelsInBinNoNaN].max()
-#
-#             # map containing only pixels within one spectral bin, within the defined aperture, omitting NaNs
-#             pixelsInBinInApertureNoNaN = np.where((np.abs(lambdaMap-lambcens[ibin])<lambfwhms[ibin]/2.) & (apertureMask!=0.) & (np.isnan(sci_img)==False) )
-#             # number of pixels in spectral bin and in aperture
-#             nPixels = len(pixelsInBinInApertureNoNaN[0])
-#             # map containing only pixels within one spectral bin, within the defined aperture
-#             sci_img_masked = sci_img[pixelsInBinInApertureNoNaN]*pixsiz_img[pixelsInBinInApertureNoNaN] #/psf_copy[pixelsInBinInApertureNoNaN]
-#             # perform aperture photometry
-#             signals_aper[ibin] = sci_img_masked.sum()/pixsiz_img[pixelsInBinInApertureNoNaN].sum() # /psf_copy[pixelsInBinInApertureNoNaN].sum()
-#
-#     if img_type == 'psf':
-#         sci_img_copy = sci_img.copy()
-#         for ibin in range(len(lambcens)):
-#             # map containing only pixels within one spectral bin, omitting NaNs
-#             pixelsInBinNoNaN = np.where((np.abs(lambdaMap-lambcens[ibin])<lambfwhms[ibin]/2.) & (np.isnan(sci_img_copy)==False) )
-#             # number of pixels in spectral bin
-#             nPixels = len(pixelsInBinNoNaN[0])
-#             # normalize the psf in a spectral bin by the total signal, normalized to the number of pixels in the spectral bin (not the same in all bins)
-#             sci_img_copy[pixelsInBinNoNaN] = sci_img_copy[pixelsInBinNoNaN]/nPixels/(sci_img_copy[pixelsInBinNoNaN]/nPixels).sum()
-#             # map containing only pixels within one spectral bin, within the defined aperture, omitting NaNs
-#             pixelsInBinInApertureNoNaN = np.where((np.abs(lambdaMap-lambcens[ibin])<lambfwhms[ibin]/2.) & (apertureMask!=0.) & (np.isnan(sci_img_copy)==False) )
-#             # map containing only pixels within one spectral bin, within the defined aperture
-#             sci_img_masked = sci_img_copy[pixelsInBinInApertureNoNaN]
-#             # perform aperture photometry
-#             signals_aper[ibin] = sci_img_masked.sum()
-#     return signals_aper
+def aperture_weighted_photometry_point_source(sci_img,weight_map,d2cMaps,spec_grid=None):
+    lambdaMap = d2cMaps['lambdaMap']
+    lambcens,lambfwhms = spec_grid[0],spec_grid[1]
+
+    copy_sci_img = sci_img.copy()
+    copy_sci_img[np.isnan(copy_sci_img)] = 0
+
+    signals_aper = np.zeros(len(lambcens))
+    for ibin in range(len(lambcens)):
+        # map containing only pixels within one spectral bin, within the defined aperture, omitting NaNs
+        pixelsInBin = np.where(np.abs(lambdaMap-lambcens[ibin])<lambfwhms[ibin]/2.)
+
+        # map containing only pixels within one spectral bin, within the defined aperture
+        sci_img_masked    = copy_sci_img[pixelsInBin]*weight_map[pixelsInBin]
+
+        # perform aperture photometry
+        signals_aper[ibin] = sci_img_masked.sum()
+    return signals_aper
 
 def aperture_photometry_extended_source(sci_img,apertureMask,aperture_area,d2cMaps=None,spec_grid=None):
     lambdaMap = d2cMaps['lambdaMap']
@@ -720,6 +727,56 @@ def aperture_photometry_extended_source(sci_img,apertureMask,aperture_area,d2cMa
 
         # perform aperture photometry
         signals_aper[ibin] = (sci_img_masked.sum()/nPixels) * aperture_area
+    return signals_aper
+
+def pixel_signal_contribution(d2cMaps,aperture,spec_grid=None):
+    from shapely.geometry import Polygon
+    print 'Pixel weight mapping'
+    lambcens,lambfwhms = spec_grid[0],spec_grid[1]
+    weight_map = np.zeros((1024,1032))
+    for ibin in range(len(lambcens)):
+        if ibin%100 == 0: print '{}/{} bins processed'.format(ibin,len(lambcens))
+        i,j = np.where(np.abs(d2cMaps['lambdaMap']-lambcens[ibin])<lambfwhms[ibin]/2.)
+        for pix in range(len(i)):
+            alphaUR = d2cMaps['alphaURMap'][i[pix],j[pix]]
+            alphaUL = d2cMaps['alphaULMap'][i[pix],j[pix]]
+            alphaLL = d2cMaps['alphaLLMap'][i[pix],j[pix]]
+            alphaLR = d2cMaps['alphaLRMap'][i[pix],j[pix]]
+
+            betaUR = d2cMaps['betaURMap'][i[pix],j[pix]]
+            betaUL = d2cMaps['betaULMap'][i[pix],j[pix]]
+            betaLL = d2cMaps['betaLLMap'][i[pix],j[pix]]
+            betaLR = d2cMaps['betaLRMap'][i[pix],j[pix]]
+
+            alphabetaUR = [alphaUR,betaUR]
+            alphabetaUL = [alphaUL,betaUL]
+            alphabetaLL = [alphaLL,betaLL]
+            alphabetaLR = [alphaLR,betaLR]
+
+            xy = [alphabetaUR, alphabetaUL, alphabetaLL, alphabetaLR]
+            polygon_shape = Polygon(xy)
+
+            weight_map[i[pix],j[pix]] = polygon_shape.intersection(aperture).area/polygon_shape.area
+    print '{}/{} bins processed'.format(len(lambcens),len(lambcens))
+    return weight_map
+
+def aperture_weighted_photometry_extended_source(sci_img,weight_map,aperture_area,d2cMaps=None,spec_grid=None):
+    lambdaMap = d2cMaps['lambdaMap']
+    lambcens,lambfwhms = spec_grid[0],spec_grid[1]
+
+    copy_sci_img = sci_img.copy()
+    copy_sci_img[np.isnan(copy_sci_img)] = 0
+
+    signals_aper = np.zeros(len(lambcens))
+    for ibin in range(len(lambcens)):
+        # map containing only pixels within one spectral bin, within the defined aperture, omitting NaNs
+        pixelsInBin = np.where((np.abs(lambdaMap-lambcens[ibin])<lambfwhms[ibin]/2.) )
+
+        # map containing only pixels within one spectral bin, within the defined aperture
+        sci_img_masked    = sci_img[pixelsInBin]*weight_map[pixelsInBin]
+
+        # perform aperture photometry
+        signals_aper[ibin] = (sci_img_masked.sum()/weight_map[pixelsInBin].sum()) * aperture_area
     return signals_aper
 
 def optimal_extraction(band,sci_img,err_img,psf,d2cMaps,spec_grid=None):
@@ -937,6 +994,7 @@ def reflectivity_from_continuum(y):
 
 #--2d
 def gauss2d(xy, amp, x0, y0, sigma_x, sigma_y, base):
+    amp, x0, y0, sigma_x, sigma_y, base = float(amp),float(x0),float(y0),float(sigma_x),float(sigma_y),float(base)
     x, y = xy
     a = 1/(2*sigma_x**2)
     b = 1/(2*sigma_y**2)
@@ -1360,10 +1418,12 @@ def detpixel_trace_compactsource(sci_img,band,d2cMaps,offset_slice=0,verbose=Fal
     return ypos,xpos
 
 def slice_alphapositions(band,d2cMaps,sliceID=None):
-    import mrs_aux as maux
     # find how many alpha positions fill an entire slice
     det_dims = (1024,1032)
-    mrs_fwhm  = maux.MRS_FWHM[band[0]]
+    MRS_alphapix = {'1':0.196,'2':0.196,'3':0.245,'4':0.273} # arcseconds
+    MRS_FWHM = {'1':2.16*MRS_alphapix['1'],'2':3.30*MRS_alphapix['2'],
+                '3':4.04*MRS_alphapix['3'],'4':5.56*MRS_alphapix['4']} # MRS PSF
+    mrs_fwhm  = MRS_FWHM[band[0]]
 
     ypos = np.arange(det_dims[0])
     slice_img,alpha_img,alpha_img2 = np.full(det_dims,0.),np.full(det_dims,0.),np.full(det_dims,0.)
@@ -1425,19 +1485,21 @@ def slice_alphapositions(band,d2cMaps,sliceID=None):
 
 
 # plot
-def plot_point_source_centroiding(band=None,sci_img=None,d2cMaps=None,spec_grid=None,centroid=None,ibin=None,data=None):
-    import mrs_aux as maux
+def plot_point_source_centroiding(band,sci_img,d2cMaps,spec_grid=None,centroid=None,ibin=None,data=None):
     # distortion maps
     sliceMap  = d2cMaps['sliceMap']
     lambdaMap = d2cMaps['lambdaMap']
     alphaMap  = d2cMaps['alphaMap']
     betaMap   = d2cMaps['betaMap']
-    nslices   = maux.MRS_nslices[band[0]]
-    mrs_fwhm  = maux.MRS_FWHM[band[0]]
+    nslices   = d2cMaps['nslices']
+    MRS_alphapix = {'1':0.196,'2':0.196,'3':0.245,'4':0.273} # arcseconds
+    MRS_FWHM = {'1':2.16*MRS_alphapix['1'],'2':3.30*MRS_alphapix['2'],
+                '3':4.04*MRS_alphapix['3'],'4':5.56*MRS_alphapix['4']} # MRS PSF
+    mrs_fwhm  = MRS_FWHM[band[0]]
     unique_betas = np.sort(np.unique(betaMap[(sliceMap>100*int(band[0])) & (sliceMap<100*(int(band[0])+1))]))
     fov_lims  = [alphaMap[np.nonzero(lambdaMap)].min(),alphaMap[np.nonzero(lambdaMap)].max()]
     lambcens,lambfwhms = spec_grid[0],spec_grid[1]
-    sign_amp,alpha_centers,beta_centers,sigma_alpha,sigma_beta = centroid[0],centroid[1],centroid[2],centroid[3],centroid[4]
+    sign_amp,alpha_centers,beta_centers,sigma_alpha,sigma_beta,sign_bkg = centroid
 
     # across-slice center:
     sum_signals = np.zeros(nslices)
